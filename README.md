@@ -22,7 +22,7 @@ Before spinning up an EC2 server, you will need an [AWS account](https://aws.ama
 
 1. Have one already, sign-in now
 2. Are participating in an AWS-run workshop, an account will be provided for you
-    1. Go to the [https://dashboard.eventengine.run/](Event Engine Dashboard)
+    1. Go to the [Event Engine Dashboard](https://dashboard.eventengine.run/)
     2. Enter the hash that your instructor gives you to access a temporary AWS account for the duraiton of the workshop
 3. Do not have an account, sign up for one [here](https://portal.aws.amazon.com/billing/signup)
 
