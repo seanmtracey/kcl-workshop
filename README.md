@@ -1,9 +1,9 @@
-# Santa as a Service
-**Use Node-RED to build and deploy an app which adds a festive beard to a face with AWS AI Technologies**
+# Face to Face w. AWS Rekognition
+**Use Node-RED to build and deploy an app which analyses a face with AWS AI Technologies**
 
 ## Intro
 
-Welcome! In this workshop we're going to be building a simple web application with HTML/CSS/JavaScript and Node-RED that will interface with AWS AI services that finds your face and then draws a Christmassy beard on it!.
+Welcome! In this workshop we're going to be building a simple web application with HTML/CSS/JavaScript and Node-RED that will interface with AWS AI services that finds your face and then draws a shows an analysis of what it finds.
 
 **We will cover...**
 
@@ -194,7 +194,7 @@ We want to use the `http in` node. Click and drag it to somewhere on the canvas.
 
 ![](images/19.png)
 
-A new panel should slide out where we can configure the functionality. Here we can choose which of the HTTP verbs we want the node to respond to, and we can set which path we want it be accessible on with the `URL` field. Enter `/beard-me` (making sure to include the forward slash) in the URL field and then click done. Now this node will respond when an HTTP request comes into our Node-RED instance at the `/beard-me` path.
+A new panel should slide out where we can configure the functionality. Here we can choose which of the HTTP verbs we want the node to respond to, and we can set which path we want it be accessible on with the `URL` field. Enter `/analyse` (making sure to include the forward slash) in the URL field and then click done. Now this node will respond when an HTTP request comes into our Node-RED instance at the `/analyse` path.
 
 But what is our node going to respond with to a request? Well, a webpage of course! And we can build one in here as well!
 
@@ -223,12 +223,13 @@ Copy and paste the following code into the section and then click the red "Done"
     // Select the camera element in the DOM that responsible for
     // enabling and accessing the webcam
     const camera = document.querySelector('node-red-camera');
+    const dataDiv = document.querySelector('#data');
 
     // When the camera takes a picture, get a copy of it
     // and add it to the webpage.
     camera.addEventListener('imageavailable', function (data) {
-        // let img = '<img src="' + data.detail + '" alt="Image before the beard"/>'
-        const img = `<img src="${data.detail}" alt="Image before the beard"/>`;
+        // let img = '<img src="' + data.detail + '" alt="Image before the analysis"/>'
+        const img = `<img src="${data.detail}" alt="Image before the analysis"/>`;
         document.body.querySelector('#pic-before').innerHTML = img;
     });
     
@@ -237,7 +238,7 @@ Copy and paste the following code into the section and then click the red "Done"
     const wsProtocol = window.location.protocol === "http:" ? "ws" : "wss";
     
     // create a new WebSocket connection to the backend of our application
-    const WS = new WebSocket(`${wsProtocol}://${window.location.host}/beard-me`);
+    const WS = new WebSocket(`${wsProtocol}://${window.location.host}/get-analysis`);
     WS.onopen = function (e) {
         console.log('WS OPEN:', e);
     };
@@ -249,19 +250,54 @@ Copy and paste the following code into the section and then click the red "Done"
         if (e.data) {
             const sourceImage = document.querySelector('#pic-before img');
             const face_info = JSON.parse(e.data).FaceDetails;
+
+            dataDiv.innerHTML = "";
             
-            // For each face we find, work through them and add a beard 
+            // For each face we find, work through them and add a bounding box 
             // on top of the source image!
-            face_info.forEach(function(face){
+            face_info.forEach(function(face, idx){
                 
                 var top = face.BoundingBox.Top * sourceImage.height;
                 var left = face.BoundingBox.Left * sourceImage.width;
                 var width = face.BoundingBox.Width * sourceImage.width;
                 var height = face.BoundingBox.Height * sourceImage.height;
                 
-                var beard_elem = '<div class="beard" style="top: '+ (0.60 * height + (top+10)) +'px; left: '+ (left) +'px; width: '+ width +'px; height: '+ height +'px;"></div>';
+                var box_elem = '<div class="bounding-box" style="top: '+ top +'px; left: '+ left + 'px; width: ' + width +'px; height: '+ height +'px;">Face ' + idx + '</div>';
 
-                document.body.querySelector('#pic-before').innerHTML += beard_elem;
+                document.body.querySelector('#pic-before').innerHTML += box_elem;
+
+                dataDiv.innerHTML += `<h3>Face ${idx}</h3>`
+
+                if(face['AgeRange']){
+                  dataDiv.innerHTML += `<p><strong>Age: </strong>Low: ${face['AgeRange'].Low} High: ${face['AgeRange'].Low}</p>`;
+                }
+
+                if(face['Beard']){
+                  dataDiv.innerHTML += `<p><strong>Has Beard?: </strong>${face['Beard'].Value === true ? "Yes!" : "No!"}</p>`;
+                }
+
+                if(face['Eyeglasses']){
+                  dataDiv.innerHTML += `<p><strong>Has Glasses?: </strong>${face['Eyeglasses'].Value === true ? "Yes!" : "No!"}</p>`;
+                }
+
+                if(face['Smile']){
+                  dataDiv.innerHTML += `<p><strong>Is Smiling?: </strong>${face['Smile'].Value === true ? "Yes!" : "No!"}</p>`;
+                }
+
+                if(face['Sunglasses']){
+                  dataDiv.innerHTML += `<p><strong>Has Sunglasses?: </strong>${face['Sunglasses'].Value === true ? "Yes!" : "No!"}</p>`;
+                }
+
+                if(face['Emotions']){
+                  
+                  face['Emotions'].forEach(function(emotion){
+                    
+                    dataDiv.innerHTML += `<p><strong>Is feeling ${emotion.Type.toLowerCase()}?: </strong>${emotion.Confidence > 75 ? "Yes!" : "No!"}</p>`;
+
+                  });
+
+                }
+
             });
             
             console.log(face_info);
@@ -297,6 +333,11 @@ This time, name your node `CSS` and replace `payload` with `payload.style` in th
 Then, copy and paste the following CSS into the area and click the red "Done" button.
 
 ```css
+h3{
+  font-weight:800;
+  margin-top:1em;
+}
+
 #pic-before {
     width: 640px !important;
     height: 480px !important;
@@ -305,15 +346,16 @@ Then, copy and paste the following CSS into the area and click the red "Done" bu
     flex: 0 0 640px;
 }
 
-.beard {
+.bounding-box {
     position: absolute;
     display: block;
-    background-image: url("https://vignette.wikia.nocookie.net/clubpenguin/images/3/34/FuzzyWhiteBeard.png");
     background-size: 100% 100%;
     background-repeat: no-repeat;
+    border: 3px solid white;
+    color: white;
 }
 
-.beard img {
+.bounding-box img {
     position: absolute;
     display: block;
     width: 100%;
@@ -338,7 +380,7 @@ Then, copy and paste the following HTML into the area and click the red "Done" b
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Santa-as-a-Service</title>
+  <title>Face to Face w. AWS Rekognition</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css">
   <style type="text/css">{{{payload.style}}}</style>
   
@@ -352,17 +394,17 @@ Then, copy and paste the following HTML into the area and click the red "Done" b
   <section class="section">
     <div class="container">
       <h1 class="title">
-        Santa-as-a-Service
+        Face to Face w. AWS Rekognition
       </h1>
       <p class="subtitle">
-        Take a picture of yourself and wait for the magic to happen!
+        Take a picture of yourself to get an analysis of your face
       </p>
     </div>
   </section>
   <section class="section">
     <div class="columns">
       <div id="upload" style="width:50%">
-        <node-red-camera data-nr-name="beard-picture" data-nr-type="still"></node-red-camera>
+        <node-red-camera data-nr-name="image-capture" data-nr-type="still"></node-red-camera>
       </div>
       <div id="pic-before" class="column">
         Before
@@ -370,6 +412,7 @@ Then, copy and paste the following HTML into the area and click the red "Done" b
     </div>
   </section>
 
+  <div id="data"></div>
 
   <script>
     {{{payload.script}}}
@@ -391,7 +434,7 @@ Go back to the "filter nodes" area and enter "http" one more time to filter the 
 
 #### Hooking it all up
 
-Now we have all of the components that will make up our web page and it's functionality, we need to connect them to each other. As things stand, only the `http in` node will function, responding to HTTP requests on the `/beard-me` path - but that's because it's an input node - it's triggered by some external functionality outside of our flow, in this case, an HTTP request. The rest of our nodes need to be explicity triggered by an input that we define.
+Now we have all of the components that will make up our web page and it's functionality, we need to connect them to each other. As things stand, only the `http in` node will function, responding to HTTP requests on the `/analyse` path - but that's because it's an input node - it's triggered by some external functionality outside of our flow, in this case, an HTTP request. The rest of our nodes need to be explicity triggered by an input that we define.
 
 But how do we do that? Why, by connecting them up, of course! You may have noticed that our nodes have little grey squares on either both of one side of them. These boxes are the inputs and outputs for the nodes; inputs on the left, outputs on the right. Node can be connected each other to pass information between one another by clicking on the output of one node and dragging it to the input on one or more nodes.
 
@@ -407,7 +450,7 @@ Once you've connected all of the nodes, click the big red "Deploy" button at the
 
 #### Viewing our Front-end
 
-Now that we've deployed our flow, our web page should be viewable on the `/beard-me` path of our Node-RED installation. Copy at paste the URL of the webpage we're currently on up to `/#` (but don't include the `/#`) and paste it into the URL field of a new tab in your browser. Before you try to navigate to the page, add `/beard-me` to the URL we just copied and then go to that page.
+Now that we've deployed our flow, our web page should be viewable on the `/analyse` path of our Node-RED installation. Copy at paste the URL of the webpage we're currently on up to `/#` (but don't include the `/#`) and paste it into the URL field of a new tab in your browser. Before you try to navigate to the page, add `/analyse` to the URL we just copied and then go to that page.
 
 ![](images/24.png)
 
@@ -420,11 +463,11 @@ But other than showing our camera feed, this webpage doesn't do too much, we sti
 ### Building our Back-end
 
 #### Recieving Images from the Front-end
-Head back to the Node-RED interface and filter the nodes again, this time with the keyword "camera". A bright yellow node should appear called `component-camera` - click and drag that onto our canvas just below our `http in` node and then double-click to configure it. Give your node a name if you wish, but for Connection ID enter `beard-picture` and then click "Done". 
+Head back to the Node-RED interface and filter the nodes again, this time with the keyword "camera". A bright yellow node should appear called `component-camera` - click and drag that onto our canvas just below our `http in` node and then double-click to configure it. Give your node a name if you wish, but for Connection ID enter `image-capture` and then click "Done". 
 
 ![](images/25a.png)
 
-This node is special, it's a little bit magic. Using the `node-red-contrib-web-components` package that we installed before, it uses the connected ID to automatically connect to the camera section of the webpage on our front-end. If you look back at the HTML code we copied and pasted above, you can see it has an attribute `data-nr-name="beard-picture"`. This is the attribute that links the camera element on the page to the node on the backend of the application. Now, any picture we take with the camera in the webpage will automatically be sent to the node on the back-end where we can manipulate and pass it on.
+This node is special, it's a little bit magic. Using the `node-red-contrib-web-components` package that we installed before, it uses the connected ID to automatically connect to the camera section of the webpage on our front-end. If you look back at the HTML code we copied and pasted above, you can see it has an attribute `data-nr-name="image-capture"`. This is the attribute that links the camera element on the page to the node on the backend of the application. Now, any picture we take with the camera in the webpage will automatically be sent to the node on the back-end where we can manipulate and pass it on.
 
 #### Manipulating our Webcam Data
 
@@ -545,14 +588,14 @@ In the new panel that appears, click the pen icon next to "Add new websocket lis
 
 ![](images/39.png)
 
-In the "path" field enter `/beard-me`. This will create a websocket listener on the `/beard-me` path of our server which our front-end will be able to connect to. Click the red "Add" and then "Done" buttons to finish configuring the websocket node.
+In the "path" field enter `/analyse`. This will create a websocket listener on the `/analyse` path of our server which our front-end will be able to connect to. Click the red "Add" and then "Done" buttons to finish configuring the websocket node.
 
 ![](images/40.png)
 
-We now have everything we need to find our faces and draw a Santa beard on ourselves! Hit the big red "Deploy" button at the top right of the Node-RED UI and then then go back and reload your front-end.
+We now have everything we need to find our faces, draw a bounding box, and analyse our faces! Hit the big red "Deploy" button at the top right of the Node-RED UI and then then go back and reload your front-end.
 
-### Bearding yourself
+### Analysing yourself
 
-And that's it! Take a picture of yours or someone elses face and after a few seconds, you should be bearded up!
+And that's it! Take a picture of yours or someone elses face and after a few seconds, you should see some info!
 
 ![](images/42.png)
